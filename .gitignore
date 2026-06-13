@@ -1,0 +1,25 @@
+# Ignore everything by default.
+*
+
+# Keep only the offline web app and its required JavaScript runtime.
+!document_scanner_app.html
+!opencv.js
+!.gitignore
+!README.md
+
+# Always ignore local/system artifacts even if copied back later.
+.DS_Store
+__pycache__/
+.venv/
+venv/
+env/
+*.py
+*.py[cod]
+requirements*.txt
+*.jpeg
+*.jpg
+*.png
+*.heic
+*.webp
+batch_scans*/
+*_debug/

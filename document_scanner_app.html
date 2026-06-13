@@ -1,0 +1,1735 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>离线文档扫描矫正</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f5f2;
+      --panel: #ffffff;
+      --ink: #1d2329;
+      --muted: #68717a;
+      --line: #d7dcd2;
+      --accent: #2563eb;
+      --danger: #dc2626;
+      --soft: #eef2ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    label,
+    .field {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    input[type="file"] {
+      max-width: 220px;
+    }
+
+    select,
+    input[type="text"],
+    input[type="range"],
+    button,
+    a.download-link {
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #ffffff;
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      padding: 0 10px;
+    }
+
+    button,
+    a.download-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+
+    button:disabled,
+    a.download-link[aria-disabled="true"] {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      gap: 14px;
+      padding: 14px;
+      min-height: calc(100vh - 67px);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .panel {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfa;
+    }
+
+    .panel-title {
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 520px;
+      display: grid;
+      place-items: center;
+      padding: 12px;
+      background:
+        linear-gradient(45deg, #eef0ec 25%, transparent 25%),
+        linear-gradient(-45deg, #eef0ec 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #eef0ec 75%),
+        linear-gradient(-45deg, transparent 75%, #eef0ec 75%);
+      background-size: 22px 22px;
+      background-position: 0 0, 0 11px, 11px -11px, -11px 0;
+    }
+
+    canvas {
+      max-width: 100%;
+      max-height: calc(100vh - 170px);
+      background: #ffffff;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+      touch-action: none;
+    }
+
+    #sourceCanvas {
+      cursor: crosshair;
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+      padding: 18px;
+    }
+
+    .corner-table {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .corner-chip {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 7px 8px;
+      font-size: 12px;
+      color: var(--muted);
+      min-width: 0;
+    }
+
+    .corner-chip strong {
+      color: var(--ink);
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .image-rail {
+      min-height: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .rail-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfa;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .image-list {
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: calc(100vh - 130px);
+    }
+
+    .thumb-item {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #ffffff;
+      padding: 7px;
+      text-align: left;
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr);
+      gap: 8px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+
+    .thumb-item.active {
+      border-color: var(--accent);
+      background: var(--soft);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+    }
+
+    .thumb-item img {
+      width: 54px;
+      height: 72px;
+      object-fit: cover;
+      border-radius: 5px;
+      background: #eef0ec;
+    }
+
+    .thumb-name {
+      font-size: 12px;
+      font-weight: 650;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .thumb-meta {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 980px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .image-list {
+        max-height: 260px;
+      }
+
+      .canvas-wrap {
+        min-height: 390px;
+      }
+
+      .corner-table {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>离线文档扫描矫正</h1>
+    <div class="toolbar">
+      <span id="engineStatus" class="status">检测引擎：初始化中</span>
+      <label>
+        导入图片
+        <input id="fileInput" type="file" accept="image/*" multiple>
+      </label>
+      <label>
+        输出比例
+        <select id="ratioSelect">
+          <option value="keep">保持原比例</option>
+          <option value="A4">A4 / A3 / A2</option>
+          <option value="B5">B5 / B4 / B3</option>
+          <option value="16:9">16:9</option>
+          <option value="9:16">9:16</option>
+          <option value="2:3">2:3</option>
+          <option value="3:2">3:2</option>
+          <option value="custom">自定义</option>
+        </select>
+      </label>
+      <label id="customRatioField" hidden>
+        自定义
+        <input id="customRatio" type="text" value="4:3" size="6">
+      </label>
+      <label>
+        增强
+        <input id="enhanceToggle" type="checkbox" checked>
+      </label>
+      <label>
+        质量
+        <input id="qualitySlider" type="range" min="55" max="95" value="86">
+        <span id="qualityValue">86%</span>
+      </label>
+      <button id="detectButton" class="primary" disabled>重新识别角点</button>
+      <button id="rotateButton" disabled>旋转结果</button>
+      <a id="downloadLink" class="download-link" aria-disabled="true" download="scanned.jpg">下载结果</a>
+      <button id="downloadAllButton" disabled>全部下载</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <aside class="image-rail">
+      <div class="rail-head">图片列表</div>
+      <div id="imageList" class="image-list">
+        <div class="empty">一次可导入多张图片</div>
+      </div>
+    </aside>
+
+    <main>
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">原图与识别角点</div>
+          <div id="sourceStatus" class="status">拖动红色角点可手动校正</div>
+        </div>
+        <div class="canvas-wrap">
+          <div id="sourceEmpty" class="empty">选择一张图片开始处理</div>
+          <canvas id="sourceCanvas" hidden></canvas>
+        </div>
+        <div id="cornerTable" class="corner-table" hidden></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">处理后结果</div>
+          <div id="outputStatus" class="status">自动透视拉伸后显示在这里</div>
+        </div>
+        <div class="canvas-wrap">
+          <div id="outputEmpty" class="empty">等待图片</div>
+          <canvas id="outputCanvas" hidden></canvas>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    window.__resolveOpenCvReady = null;
+    window.__opencvReady = new Promise(resolve => {
+      window.__resolveOpenCvReady = resolve;
+      window.Module = {
+        onRuntimeInitialized() {
+          resolve(true);
+        }
+      };
+    });
+  </script>
+  <script async src="./opencv.js" onerror="window.__resolveOpenCvReady && window.__resolveOpenCvReady(false)"></script>
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const sourceCanvas = document.getElementById("sourceCanvas");
+    const outputCanvas = document.getElementById("outputCanvas");
+    const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+    const outputCtx = outputCanvas.getContext("2d", { willReadFrequently: true });
+    const sourceEmpty = document.getElementById("sourceEmpty");
+    const outputEmpty = document.getElementById("outputEmpty");
+    const sourceStatus = document.getElementById("sourceStatus");
+    const outputStatus = document.getElementById("outputStatus");
+    const cornerTable = document.getElementById("cornerTable");
+    const ratioSelect = document.getElementById("ratioSelect");
+    const customRatioField = document.getElementById("customRatioField");
+    const customRatio = document.getElementById("customRatio");
+    const enhanceToggle = document.getElementById("enhanceToggle");
+    const detectButton = document.getElementById("detectButton");
+    const rotateButton = document.getElementById("rotateButton");
+    const downloadLink = document.getElementById("downloadLink");
+    const downloadAllButton = document.getElementById("downloadAllButton");
+    const engineStatus = document.getElementById("engineStatus");
+    const imageList = document.getElementById("imageList");
+    const qualitySlider = document.getElementById("qualitySlider");
+    const qualityValue = document.getElementById("qualityValue");
+
+    const state = {
+      items: [],
+      currentIndex: -1,
+      image: null,
+      imageName: "scanned.jpg",
+      corners: null,
+      dragging: -1,
+      rotation: 0,
+      previewScale: 1,
+      previewOffsetX: 0,
+      previewOffsetY: 0,
+      useOpenCv: false
+    };
+
+    const CORNER_LABELS = ["左上", "右上", "右下", "左下"];
+
+    refreshEngineStatus();
+    [1000, 2500, 5000, 8000].forEach(delay => {
+      setTimeout(refreshEngineStatus, delay);
+    });
+
+    fileInput.addEventListener("change", async event => {
+      const files = [...(event.target.files || [])].filter(file => file.type.startsWith("image/"));
+      if (!files.length) return;
+
+      setStatus(`正在导入 ${files.length} 张图片...`, false);
+      const imported = [];
+      for (const file of files) {
+        try {
+          imported.push(await loadImageItem(file));
+        } catch (error) {
+          console.warn("Image import failed", file.name, error);
+        }
+      }
+
+      state.items = imported;
+      state.currentIndex = imported.length ? 0 : -1;
+      renderImageList();
+
+      if (!imported.length) {
+        clearCurrentImage("没有可处理的图片");
+        return;
+      }
+
+      detectButton.disabled = false;
+      rotateButton.disabled = false;
+      downloadAllButton.disabled = false;
+      await processImagesInOrder();
+      selectImage(0, { detectIfNeeded: false });
+    });
+
+    ratioSelect.addEventListener("change", () => {
+      customRatioField.hidden = ratioSelect.value !== "custom";
+      updateWarp();
+    });
+    customRatio.addEventListener("input", updateWarp);
+    enhanceToggle.addEventListener("change", updateWarp);
+    qualitySlider.addEventListener("input", () => {
+      qualityValue.textContent = `${qualitySlider.value}%`;
+      updateWarp();
+    });
+    detectButton.addEventListener("click", async () => {
+      await autoDetectCorners();
+      updateWarp();
+    });
+    rotateButton.addEventListener("click", () => {
+      state.rotation = (state.rotation + 1) % 4;
+      syncCurrentItem();
+      updateWarp();
+      renderImageList();
+    });
+    downloadAllButton.addEventListener("click", downloadAllProcessed);
+
+    sourceCanvas.addEventListener("pointerdown", event => {
+      if (!state.corners) return;
+      const point = eventToImagePoint(event);
+      const hit = nearestCorner(point, 36 / state.previewScale);
+      if (hit >= 0) {
+        state.dragging = hit;
+        sourceCanvas.setPointerCapture(event.pointerId);
+      }
+    });
+
+    sourceCanvas.addEventListener("pointermove", event => {
+      if (state.dragging < 0 || !state.corners) return;
+      const point = eventToImagePoint(event);
+      state.corners[state.dragging] = clampPoint(point, state.image.width, state.image.height);
+      syncCurrentItem();
+      drawSource();
+      updateCornerTable();
+      updateWarp();
+    });
+
+    sourceCanvas.addEventListener("pointerup", event => {
+      if (state.dragging >= 0) {
+        sourceCanvas.releasePointerCapture(event.pointerId);
+      }
+      state.dragging = -1;
+    });
+
+    sourceCanvas.addEventListener("pointercancel", () => {
+      state.dragging = -1;
+    });
+
+    function currentItem() {
+      return state.items[state.currentIndex] || null;
+    }
+
+    function loadImageItem(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+          resolve({
+            file,
+            image,
+            url,
+            name: file.name,
+            imageName: file.name.replace(/\.[^.]+$/, "") + "_scanned.jpg",
+            corners: null,
+            rotation: 0,
+            outputDataUrl: "",
+            status: "待处理"
+          });
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("图片读取失败"));
+        };
+        image.src = url;
+      });
+    }
+
+    async function processImagesInOrder() {
+      for (let index = 0; index < state.items.length; index++) {
+        selectImage(index, { detectIfNeeded: false, renderOnly: true });
+        const item = currentItem();
+        item.status = `处理中 ${index + 1}/${state.items.length}`;
+        renderImageList();
+        setupSourceCanvas();
+        await autoDetectCorners();
+        updateWarp();
+        item.status = "已处理";
+        syncCurrentItem();
+        renderImageList();
+      }
+      setStatus(`已按顺序处理 ${state.items.length} 张图片`, false);
+    }
+
+    function selectImage(index, options = {}) {
+      if (index < 0 || index >= state.items.length) return;
+      syncCurrentItem();
+      state.currentIndex = index;
+      const item = currentItem();
+      state.image = item.image;
+      state.imageName = item.imageName;
+      state.corners = item.corners ? item.corners.map(point => ({ ...point })) : null;
+      state.rotation = item.rotation || 0;
+      state.dragging = -1;
+      setupSourceCanvas();
+
+      if (options.detectIfNeeded && !state.corners) {
+        autoDetectCorners().then(() => {
+          updateWarp();
+          syncCurrentItem();
+          renderImageList();
+        });
+      } else if (state.corners) {
+        updateWarp();
+      } else {
+        outputCanvas.hidden = true;
+        outputEmpty.hidden = false;
+        downloadLink.removeAttribute("href");
+        downloadLink.setAttribute("aria-disabled", "true");
+      }
+
+      updateCornerTable();
+      renderImageList();
+    }
+
+    function syncCurrentItem() {
+      const item = currentItem();
+      if (!item) return;
+      item.corners = state.corners ? state.corners.map(point => ({ ...point })) : null;
+      item.rotation = state.rotation || 0;
+      item.outputDataUrl = downloadLink.getAttribute("href") || item.outputDataUrl || "";
+      item.status = item.corners ? "已处理" : item.status;
+    }
+
+    function renderImageList() {
+      imageList.innerHTML = "";
+      if (!state.items.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "一次可导入多张图片";
+        imageList.appendChild(empty);
+        return;
+      }
+
+      state.items.forEach((item, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `thumb-item${index === state.currentIndex ? " active" : ""}`;
+        button.addEventListener("click", () => selectImage(index, { detectIfNeeded: true }));
+
+        const thumb = document.createElement("img");
+        thumb.src = item.url;
+        thumb.alt = item.name;
+
+        const text = document.createElement("div");
+        const name = document.createElement("div");
+        name.className = "thumb-name";
+        name.textContent = `${index + 1}. ${item.name}`;
+
+        const meta = document.createElement("div");
+        meta.className = "thumb-meta";
+        meta.textContent = item.status || (item.corners ? "已处理" : "待处理");
+
+        text.append(name, meta);
+        button.append(thumb, text);
+        imageList.appendChild(button);
+      });
+    }
+
+    function clearCurrentImage(message) {
+      state.image = null;
+      state.imageName = "scanned.jpg";
+      state.corners = null;
+      state.rotation = 0;
+      sourceCanvas.hidden = true;
+      outputCanvas.hidden = true;
+      sourceEmpty.hidden = false;
+      outputEmpty.hidden = false;
+      cornerTable.hidden = true;
+      detectButton.disabled = true;
+      rotateButton.disabled = true;
+      downloadAllButton.disabled = true;
+      downloadLink.removeAttribute("href");
+      downloadLink.setAttribute("aria-disabled", "true");
+      setStatus(message, true);
+    }
+
+    function setupSourceCanvas() {
+      const maxW = 1100;
+      const maxH = 1400;
+      const scale = Math.min(maxW / state.image.width, maxH / state.image.height, 1);
+      sourceCanvas.width = Math.round(state.image.width * scale);
+      sourceCanvas.height = Math.round(state.image.height * scale);
+      state.previewScale = scale;
+      state.previewOffsetX = 0;
+      state.previewOffsetY = 0;
+      sourceCanvas.hidden = false;
+      sourceEmpty.hidden = true;
+      drawSource();
+      sourceStatus.textContent = `${state.image.width} x ${state.image.height}`;
+    }
+
+    function drawSource() {
+      if (!state.image) return;
+      sourceCtx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+      sourceCtx.drawImage(state.image, 0, 0, sourceCanvas.width, sourceCanvas.height);
+      if (!state.corners) return;
+
+      const points = state.corners.map(toCanvasPoint);
+      sourceCtx.save();
+      sourceCtx.lineWidth = 3;
+      sourceCtx.strokeStyle = "#2563eb";
+      sourceCtx.fillStyle = "rgba(37, 99, 235, 0.13)";
+      sourceCtx.beginPath();
+      points.forEach((p, index) => {
+        if (index === 0) sourceCtx.moveTo(p.x, p.y);
+        else sourceCtx.lineTo(p.x, p.y);
+      });
+      sourceCtx.closePath();
+      sourceCtx.fill();
+      sourceCtx.stroke();
+
+      points.forEach((p, index) => {
+        sourceCtx.beginPath();
+        sourceCtx.fillStyle = "#ef4444";
+        sourceCtx.strokeStyle = "#ffffff";
+        sourceCtx.lineWidth = 3;
+        sourceCtx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+        sourceCtx.fill();
+        sourceCtx.stroke();
+
+        sourceCtx.font = "600 13px system-ui";
+        sourceCtx.fillStyle = "#ef4444";
+        sourceCtx.fillText(CORNER_LABELS[index], p.x + 12, p.y - 10);
+      });
+      sourceCtx.restore();
+    }
+
+    async function autoDetectCorners() {
+      if (!state.image) return;
+      const detection = makeDetectionImage(1000);
+      const candidates = [];
+      const scoringPaperMask = buildScoringPaperMask(detection);
+      const openCvCandidates = await detectCornersWithOpenCv(detection);
+      candidates.push(...openCvCandidates);
+      const thresholds = [
+        [55, 125, 75, 160],
+        [65, 105, 85, 145],
+        [80, 95, 100, 135],
+        [95, 80, 115, 125]
+      ];
+
+      for (const threshold of thresholds) {
+        const mask = buildPaperMask(detection.data, detection.width, detection.height, threshold);
+        const closed = morph(mask, detection.width, detection.height, 3, "dilate");
+        const opened = morph(closed, detection.width, detection.height, 3, "erode");
+        const components = connectedComponents(opened, detection.width, detection.height)
+          .filter(c => c.area > detection.width * detection.height * 0.08)
+          .sort((a, b) => b.area - a.area)
+          .slice(0, 4);
+
+        for (const component of components) {
+          const hull = convexHull(component.boundary);
+          if (hull.length < 4) continue;
+          const rect = minAreaRect(hull);
+          candidates.push(rect.map(p => ({ x: p.x / detection.scale, y: p.y / detection.scale })));
+          const approx = approximateQuad(hull);
+          if (approx) {
+            candidates.push(approx.map(p => ({ x: p.x / detection.scale, y: p.y / detection.scale })));
+          }
+        }
+      }
+
+      if (!candidates.length) {
+        state.corners = defaultCorners();
+        setStatus("未能稳定识别边界，已使用默认角点", true);
+      } else {
+        state.corners = orderPoints(bestCandidate(candidates, detection, scoringPaperMask));
+        setStatus(
+          state.useOpenCv ? "已使用 OpenCV.js 识别角点，可拖动微调" : "已使用内置算法识别角点，可拖动微调",
+          false
+        );
+      }
+      syncCurrentItem();
+      drawSource();
+      updateCornerTable();
+    }
+
+    function makeDetectionImage(maxSide) {
+      const scale = Math.min(maxSide / state.image.width, maxSide / state.image.height, 1);
+      const width = Math.round(state.image.width * scale);
+      const height = Math.round(state.image.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(state.image, 0, 0, width, height);
+      return {
+        width,
+        height,
+        scale,
+        canvas,
+        data: ctx.getImageData(0, 0, width, height).data
+      };
+    }
+
+    async function detectCornersWithOpenCv(detection) {
+      const ready = await openCvReadyWithin(5000);
+      state.useOpenCv = Boolean(ready && window.cv && cv.Mat);
+      if (!state.useOpenCv) return [];
+
+      const candidates = [];
+      let src;
+      let rgb;
+      let gray;
+      let blurred;
+      let edges;
+      let kernel;
+      let closed;
+      let contours;
+      let hierarchy;
+
+      try {
+        src = cv.imread(detection.canvas);
+        rgb = new cv.Mat();
+        gray = new cv.Mat();
+        blurred = new cv.Mat();
+        cv.cvtColor(src, rgb, cv.COLOR_RGBA2RGB);
+        cv.cvtColor(rgb, gray, cv.COLOR_RGB2GRAY);
+        cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+        const median = medianOfMat(blurred);
+        const edgeVariants = [
+          [0.45, 1.10, 5],
+          [0.55, 1.25, 7],
+          [0.66, 1.33, 7],
+          [0.80, 1.60, 9]
+        ];
+
+        for (const [lowFactor, highFactor, kernelSize] of edgeVariants) {
+          edges = new cv.Mat();
+          closed = new cv.Mat();
+          contours = new cv.MatVector();
+          hierarchy = new cv.Mat();
+          kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kernelSize, kernelSize));
+
+          let lower = Math.max(0, Math.floor(median * lowFactor));
+          let upper = Math.min(255, Math.floor(median * highFactor));
+          if (upper <= lower) {
+            lower = 50;
+            upper = 150;
+          }
+
+          cv.Canny(blurred, edges, lower, upper);
+          cv.morphologyEx(edges, closed, cv.MORPH_CLOSE, kernel, new cv.Point(-1, -1), 2);
+          cv.dilate(closed, closed, kernel, new cv.Point(-1, -1), 1);
+          cv.findContours(closed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+          candidates.push(...candidateQuadsFromOpenCvContours(contours, detection.scale, detection.width, detection.height));
+
+          edges.delete();
+          closed.delete();
+          contours.delete();
+          hierarchy.delete();
+          kernel.delete();
+          edges = closed = contours = hierarchy = kernel = null;
+        }
+      } catch (error) {
+        console.warn("OpenCV.js detection failed, using fallback detection.", error);
+        state.useOpenCv = false;
+        return [];
+      } finally {
+        [src, rgb, gray, blurred, edges, closed, contours, hierarchy, kernel].forEach(mat => {
+          if (mat && typeof mat.delete === "function") mat.delete();
+        });
+      }
+
+      return candidates;
+    }
+
+    function openCvReadyWithin(timeoutMs) {
+      if (window.cv && cv.Mat) return Promise.resolve(true);
+      if (window.cv && typeof window.cv.then === "function") {
+        return Promise.race([
+          window.cv.then(module => {
+            window.cv = module;
+            refreshEngineStatus();
+            return Boolean(window.cv && window.cv.Mat);
+          }).catch(() => false),
+          new Promise(resolve => setTimeout(() => resolve(false), timeoutMs))
+        ]);
+      }
+      return Promise.race([
+        window.__opencvReady || Promise.resolve(false),
+        new Promise(resolve => setTimeout(() => resolve(false), timeoutMs))
+      ]).then(ready => {
+        if (ready && window.cv && typeof window.cv.then === "function") {
+          return window.cv.then(module => {
+            window.cv = module;
+            refreshEngineStatus();
+            return Boolean(window.cv && window.cv.Mat);
+          }).catch(() => false);
+        }
+        refreshEngineStatus();
+        return Boolean(ready && window.cv && window.cv.Mat);
+      });
+    }
+
+    async function refreshEngineStatus() {
+      const ready = await Promise.race([
+        Promise.resolve().then(async () => {
+          if (window.cv && typeof window.cv.then === "function") {
+            window.cv = await window.cv;
+          }
+          return Boolean(window.cv && window.cv.Mat);
+        }).catch(() => false),
+        new Promise(resolve => setTimeout(() => resolve(false), 5000))
+      ]);
+      engineStatus.textContent = ready ? "检测引擎：OpenCV.js" : "检测引擎：内置算法";
+    }
+
+    function medianOfMat(mat) {
+      const data = mat.data;
+      const values = [];
+      const step = Math.max(1, Math.floor(data.length / 40000));
+      for (let i = 0; i < data.length; i += step) {
+        values.push(data[i]);
+      }
+      values.sort((a, b) => a - b);
+      return values[Math.floor(values.length / 2)] || 128;
+    }
+
+    function candidateQuadsFromOpenCvContours(contours, scale, width, height) {
+      const contourItems = [];
+      const imageArea = width * height;
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i);
+        const area = cv.contourArea(contour);
+        if (area >= imageArea * 0.02) {
+          contourItems.push({ contour, area });
+        } else {
+          contour.delete();
+        }
+      }
+      contourItems.sort((a, b) => b.area - a.area);
+
+      const candidates = [];
+      for (const item of contourItems.slice(0, 30)) {
+        const perimeter = cv.arcLength(item.contour, true);
+        for (const epsilonFactor of [0.015, 0.02, 0.03, 0.04, 0.06]) {
+          const approx = new cv.Mat();
+          cv.approxPolyDP(item.contour, approx, epsilonFactor * perimeter, true);
+          if (approx.rows === 4) {
+            candidates.push(matPointsToImagePoints(approx, scale));
+          }
+          approx.delete();
+        }
+      }
+
+      const mergeItems = contourItems.slice(0, 12).filter(item => item.area >= imageArea * 0.02);
+      if (mergeItems.length >= 2) {
+        const merged = new cv.Mat();
+        const totalRows = mergeItems.reduce((sum, item) => sum + item.contour.rows, 0);
+        merged.create(totalRows, 1, cv.CV_32SC2);
+        let row = 0;
+        for (const item of mergeItems) {
+          for (let i = 0; i < item.contour.rows; i++, row++) {
+            merged.intPtr(row, 0)[0] = item.contour.intPtr(i, 0)[0];
+            merged.intPtr(row, 0)[1] = item.contour.intPtr(i, 0)[1];
+          }
+        }
+        const hull = new cv.Mat();
+        cv.convexHull(merged, hull, false, true);
+        const perimeter = cv.arcLength(hull, true);
+        for (const epsilonFactor of [0.01, 0.015, 0.02, 0.03, 0.04, 0.06]) {
+          const approx = new cv.Mat();
+          cv.approxPolyDP(hull, approx, epsilonFactor * perimeter, true);
+          if (approx.rows === 4) {
+            candidates.push(matPointsToImagePoints(approx, scale));
+          }
+          approx.delete();
+        }
+        merged.delete();
+        hull.delete();
+      }
+
+      for (const item of contourItems) {
+        item.contour.delete();
+      }
+
+      return candidates;
+    }
+
+    function matPointsToImagePoints(mat, scale) {
+      const points = [];
+      for (let i = 0; i < mat.rows; i++) {
+        const point = mat.intPtr(i, 0);
+        points.push({ x: point[0] / scale, y: point[1] / scale });
+      }
+      return points;
+    }
+
+    function buildPaperMask(data, width, height, threshold) {
+      const [satLimit, valueMin, looseSatLimit, lightMin] = threshold;
+      const mask = new Uint8Array(width * height);
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const sat = max === 0 ? 0 : ((max - min) / max) * 255;
+        const value = max;
+        const light = 0.299 * r + 0.587 * g + 0.114 * b;
+        if ((sat < satLimit && value > valueMin) || (sat < looseSatLimit && light > lightMin)) {
+          mask[p] = 1;
+        }
+      }
+      return mask;
+    }
+
+    function buildScoringPaperMask(detection) {
+      const thresholds = [
+        [55, 125, 75, 160],
+        [65, 105, 85, 145],
+        [80, 95, 100, 135]
+      ];
+      const combined = new Uint8Array(detection.width * detection.height);
+      for (const threshold of thresholds) {
+        const mask = buildPaperMask(detection.data, detection.width, detection.height, threshold);
+        for (let i = 0; i < combined.length; i++) {
+          combined[i] = combined[i] || mask[i] ? 1 : 0;
+        }
+      }
+      const closed = morph(combined, detection.width, detection.height, 2, "dilate");
+      return morph(closed, detection.width, detection.height, 1, "erode");
+    }
+
+    function morph(mask, width, height, radius, mode) {
+      const out = new Uint8Array(mask.length);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          let value = mode === "erode" ? 1 : 0;
+          for (let dy = -radius; dy <= radius; dy++) {
+            const yy = y + dy;
+            if (yy < 0 || yy >= height) continue;
+            for (let dx = -radius; dx <= radius; dx++) {
+              const xx = x + dx;
+              if (xx < 0 || xx >= width) continue;
+              const current = mask[yy * width + xx];
+              if (mode === "dilate" && current) value = 1;
+              if (mode === "erode" && !current) value = 0;
+            }
+          }
+          out[y * width + x] = value;
+        }
+      }
+      return out;
+    }
+
+    function connectedComponents(mask, width, height) {
+      const seen = new Uint8Array(mask.length);
+      const components = [];
+      const queue = [];
+      const minArea = width * height * 0.01;
+
+      for (let start = 0; start < mask.length; start++) {
+        if (!mask[start] || seen[start]) continue;
+        queue.length = 0;
+        queue.push(start);
+        seen[start] = 1;
+        let area = 0;
+        const boundary = [];
+
+        for (let q = 0; q < queue.length; q++) {
+          const idx = queue[q];
+          const x = idx % width;
+          const y = Math.floor(idx / width);
+          area++;
+
+          let isBoundary = false;
+          const neighbors = [
+            [x + 1, y],
+            [x - 1, y],
+            [x, y + 1],
+            [x, y - 1]
+          ];
+          for (const [nx, ny] of neighbors) {
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+              isBoundary = true;
+              continue;
+            }
+            const ni = ny * width + nx;
+            if (!mask[ni]) {
+              isBoundary = true;
+            } else if (!seen[ni]) {
+              seen[ni] = 1;
+              queue.push(ni);
+            }
+          }
+          if (isBoundary) boundary.push({ x, y });
+        }
+
+        if (area >= minArea && boundary.length > 8) {
+          components.push({ area, boundary });
+        }
+      }
+      return components;
+    }
+
+    function convexHull(points) {
+      const sorted = [...points]
+        .sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x)
+        .filter((p, i, arr) => i === 0 || p.x !== arr[i - 1].x || p.y !== arr[i - 1].y);
+      if (sorted.length <= 3) return sorted;
+
+      const lower = [];
+      for (const p of sorted) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+          lower.pop();
+        }
+        lower.push(p);
+      }
+      const upper = [];
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        const p = sorted[i];
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+          upper.pop();
+        }
+        upper.push(p);
+      }
+      lower.pop();
+      upper.pop();
+      return lower.concat(upper);
+    }
+
+    function cross(a, b, c) {
+      return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    }
+
+    function minAreaRect(hull) {
+      let best = null;
+      for (let i = 0; i < hull.length; i++) {
+        const a = hull[i];
+        const b = hull[(i + 1) % hull.length];
+        const angle = Math.atan2(b.y - a.y, b.x - a.x);
+        const cos = Math.cos(-angle);
+        const sin = Math.sin(-angle);
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+
+        for (const p of hull) {
+          const x = p.x * cos - p.y * sin;
+          const y = p.x * sin + p.y * cos;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+
+        const area = (maxX - minX) * (maxY - minY);
+        if (!best || area < best.area) {
+          best = { angle, minX, maxX, minY, maxY, area };
+        }
+      }
+
+      const cos = Math.cos(best.angle);
+      const sin = Math.sin(best.angle);
+      return [
+        unrotate(best.minX, best.minY, cos, sin),
+        unrotate(best.maxX, best.minY, cos, sin),
+        unrotate(best.maxX, best.maxY, cos, sin),
+        unrotate(best.minX, best.maxY, cos, sin)
+      ];
+    }
+
+    function unrotate(x, y, cos, sin) {
+      return { x: x * cos - y * sin, y: x * sin + y * cos };
+    }
+
+    function approximateQuad(hull) {
+      if (hull.length < 4) return null;
+      const ordered = orderPoints(hull);
+      const seeds = [
+        ordered[0],
+        ordered[1],
+        ordered[2],
+        ordered[3]
+      ];
+      return orderPoints(seeds);
+    }
+
+    function bestCandidate(candidates, detection, paperMask) {
+      let best = candidates[0];
+      let bestScore = -Infinity;
+      const imageArea = state.image.width * state.image.height;
+
+      for (const candidate of candidates) {
+        const points = orderPoints(candidate).map(p => clampPoint(p, state.image.width, state.image.height));
+        const area = polygonArea(points);
+        if (area < imageArea * 0.08) continue;
+
+        const w1 = distance(points[0], points[1]);
+        const w2 = distance(points[3], points[2]);
+        const h1 = distance(points[0], points[3]);
+        const h2 = distance(points[1], points[2]);
+        const width = Math.max(w1, w2);
+        const height = Math.max(h1, h2);
+        if (width < 20 || height < 20) continue;
+
+        const aspect = Math.max(width, height) / Math.max(1, Math.min(width, height));
+        if (aspect > 5) continue;
+
+        const balance = (Math.min(w1, w2) / Math.max(w1, w2) + Math.min(h1, h2) / Math.max(h1, h2)) / 2;
+        const areaScore = area / imageArea;
+        const touchPenalty = touchesFrame(points) * 0.25;
+        const paperRatio = paperRatioForCandidate(points, detection, paperMask);
+        let score = areaScore * 0.85 + balance + 1 / aspect - touchPenalty + paperRatio * 3.4;
+
+        if (paperRatio > 0.92) score += 0.45;
+        if (paperRatio < 0.85) score -= 1.15;
+        if (paperRatio < 0.65) score -= 0.95;
+        if (paperRatio < 0.45) score -= 0.85;
+
+        const frameTouches = touchesFrame(points);
+        if (areaScore > 0.65 && paperRatio < 0.82) score -= 0.9;
+        if (areaScore > 0.85 && frameTouches >= 2) score -= 1.1;
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = points;
+        }
+      }
+      return best;
+    }
+
+    function paperRatioForCandidate(points, detection, paperMask) {
+      const scaled = points.map(point => ({
+        x: point.x * detection.scale,
+        y: point.y * detection.scale
+      }));
+      const xs = scaled.map(p => p.x);
+      const ys = scaled.map(p => p.y);
+      const minX = clamp(Math.floor(Math.min(...xs)), 0, detection.width - 1);
+      const maxX = clamp(Math.ceil(Math.max(...xs)), 0, detection.width - 1);
+      const minY = clamp(Math.floor(Math.min(...ys)), 0, detection.height - 1);
+      const maxY = clamp(Math.ceil(Math.max(...ys)), 0, detection.height - 1);
+      const spanX = Math.max(1, maxX - minX);
+      const spanY = Math.max(1, maxY - minY);
+      const step = Math.max(3, Math.floor(Math.max(spanX, spanY) / 42));
+
+      let inside = 0;
+      let paper = 0;
+      for (let y = minY; y <= maxY; y += step) {
+        for (let x = minX; x <= maxX; x += step) {
+          const point = { x, y };
+          if (!pointInPolygon(point, scaled)) continue;
+          inside++;
+          if (paperMask[y * detection.width + x]) paper++;
+        }
+      }
+
+      if (inside === 0) return 0;
+      return paper / inside;
+    }
+
+    function pointInPolygon(point, polygon) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const pi = polygon[i];
+        const pj = polygon[j];
+        const intersects = ((pi.y > point.y) !== (pj.y > point.y))
+          && (point.x < (pj.x - pi.x) * (point.y - pi.y) / ((pj.y - pi.y) || 1e-9) + pi.x);
+        if (intersects) inside = !inside;
+      }
+      return inside;
+    }
+
+    function touchesFrame(points) {
+      const margin = Math.min(state.image.width, state.image.height) * 0.01;
+      const xs = points.map(p => p.x);
+      const ys = points.map(p => p.y);
+      return [
+        Math.min(...xs) <= margin,
+        Math.min(...ys) <= margin,
+        Math.max(...xs) >= state.image.width - margin,
+        Math.max(...ys) >= state.image.height - margin
+      ].filter(Boolean).length;
+    }
+
+    function orderPoints(points) {
+      const pts = points.map(p => ({ x: p.x, y: p.y }));
+      const sums = pts.map(p => p.x + p.y);
+      const diffs = pts.map(p => p.y - p.x);
+      return [
+        pts[indexOfMin(sums)],
+        pts[indexOfMin(diffs)],
+        pts[indexOfMax(sums)],
+        pts[indexOfMax(diffs)]
+      ];
+    }
+
+    function updateWarp() {
+      if (!state.image || !state.corners) return;
+      const ordered = orderPoints(state.corners);
+      const size = outputSize(ordered);
+      outputCanvas.width = size.width;
+      outputCanvas.height = size.height;
+      const srcCanvas = document.createElement("canvas");
+      srcCanvas.width = state.image.width;
+      srcCanvas.height = state.image.height;
+      const srcCtx = srcCanvas.getContext("2d", { willReadFrequently: true });
+      srcCtx.drawImage(state.image, 0, 0);
+      const src = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+      const out = outputCtx.createImageData(size.width, size.height);
+      warpPerspective(src, out, ordered, size.width, size.height);
+      if (enhanceToggle.checked) enhanceImageData(out);
+      outputCtx.putImageData(out, 0, 0);
+
+      if (state.rotation) rotateOutputCanvas();
+
+      outputCanvas.hidden = false;
+      outputEmpty.hidden = true;
+      outputStatus.textContent = `${outputCanvas.width} x ${outputCanvas.height}`;
+      downloadLink.href = outputCanvas.toDataURL("image/jpeg", outputQuality());
+      downloadLink.download = state.imageName;
+      downloadLink.setAttribute("aria-disabled", "false");
+      const item = currentItem();
+      if (item) {
+        item.outputDataUrl = downloadLink.href;
+        item.corners = state.corners ? state.corners.map(point => ({ ...point })) : null;
+        item.rotation = state.rotation || 0;
+        item.status = "已处理";
+      }
+    }
+
+    function outputQuality() {
+      return clamp(Number(qualitySlider.value) / 100, 0.55, 0.95);
+    }
+
+    async function downloadAllProcessed() {
+      if (!state.items.length) return;
+      downloadAllButton.disabled = true;
+      const previousIndex = state.currentIndex;
+      const files = [];
+
+      try {
+        for (let index = 0; index < state.items.length; index++) {
+          selectImage(index, { detectIfNeeded: false });
+          const item = currentItem();
+          if (!item.corners) {
+            await autoDetectCorners();
+          }
+          updateWarp();
+          syncCurrentItem();
+          const dataUrl = item.outputDataUrl || downloadLink.getAttribute("href");
+          if (!dataUrl) continue;
+          files.push({
+            name: safeZipName(item.imageName || `scanned_${index + 1}.jpg`),
+            data: dataUrlToUint8Array(dataUrl)
+          });
+          item.status = "已加入压缩包";
+          renderImageList();
+        }
+
+        if (!files.length) {
+          setStatus("没有可下载的处理结果", true);
+          return;
+        }
+
+        const zipBlob = createZipBlob(files);
+        const url = URL.createObjectURL(zipBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "scanned_documents.zip";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        setStatus(`已打包 ${files.length} 张处理后图片`, false);
+      } finally {
+        if (previousIndex >= 0 && previousIndex < state.items.length) {
+          selectImage(previousIndex, { detectIfNeeded: false });
+        }
+        state.items.forEach(item => {
+          if (item.corners) item.status = "已处理";
+        });
+        renderImageList();
+        downloadAllButton.disabled = false;
+      }
+    }
+
+    function safeZipName(name) {
+      return name.replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_");
+    }
+
+    function dataUrlToUint8Array(dataUrl) {
+      const base64 = dataUrl.split(",")[1] || "";
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    function createZipBlob(files) {
+      const localParts = [];
+      const centralParts = [];
+      let offset = 0;
+
+      files.forEach(file => {
+        const nameBytes = utf8Bytes(file.name);
+        const crc = crc32(file.data);
+        const local = concatBytes(
+          u32(0x04034b50),
+          u16(20),
+          u16(0x0800),
+          u16(0),
+          u16(0),
+          u16(0),
+          u32(crc),
+          u32(file.data.length),
+          u32(file.data.length),
+          u16(nameBytes.length),
+          u16(0),
+          nameBytes,
+          file.data
+        );
+        localParts.push(local);
+
+        centralParts.push(concatBytes(
+          u32(0x02014b50),
+          u16(20),
+          u16(20),
+          u16(0x0800),
+          u16(0),
+          u16(0),
+          u16(0),
+          u32(crc),
+          u32(file.data.length),
+          u32(file.data.length),
+          u16(nameBytes.length),
+          u16(0),
+          u16(0),
+          u16(0),
+          u16(0),
+          u32(0),
+          u32(offset),
+          nameBytes
+        ));
+
+        offset += local.length;
+      });
+
+      const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+      const centralOffset = offset;
+      const end = concatBytes(
+        u32(0x06054b50),
+        u16(0),
+        u16(0),
+        u16(files.length),
+        u16(files.length),
+        u32(centralSize),
+        u32(centralOffset),
+        u16(0)
+      );
+
+      return new Blob([...localParts, ...centralParts, end], { type: "application/zip" });
+    }
+
+    function utf8Bytes(text) {
+      return new TextEncoder().encode(text);
+    }
+
+    function u16(value) {
+      return new Uint8Array([value & 255, (value >>> 8) & 255]);
+    }
+
+    function u32(value) {
+      return new Uint8Array([
+        value & 255,
+        (value >>> 8) & 255,
+        (value >>> 16) & 255,
+        (value >>> 24) & 255
+      ]);
+    }
+
+    function concatBytes(...parts) {
+      const length = parts.reduce((sum, part) => sum + part.length, 0);
+      const out = new Uint8Array(length);
+      let offset = 0;
+      for (const part of parts) {
+        out.set(part, offset);
+        offset += part.length;
+      }
+      return out;
+    }
+
+    function crc32(bytes) {
+      let crc = 0xffffffff;
+      for (let i = 0; i < bytes.length; i++) {
+        crc ^= bytes[i];
+        for (let bit = 0; bit < 8; bit++) {
+          crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+        }
+      }
+      return (crc ^ 0xffffffff) >>> 0;
+    }
+
+    function outputSize(points) {
+      const wTop = distance(points[0], points[1]);
+      const wBottom = distance(points[3], points[2]);
+      const hLeft = distance(points[0], points[3]);
+      const hRight = distance(points[1], points[2]);
+      let width = Math.max(1, Math.round(Math.max(wTop, wBottom)));
+      let height = Math.max(1, Math.round(Math.max(hLeft, hRight)));
+      const ratioSpec = currentRatioSpec();
+      if (!ratioSpec) return { width, height };
+
+      const longSide = Math.max(width, height);
+      if (ratioSpec.preserveOrientation) {
+        const shortSide = Math.max(1, Math.round(longSide / ratioSpec.ratio));
+        return height >= width
+          ? { width: shortSide, height: longSide }
+          : { width: longSide, height: shortSide };
+      }
+
+      if (ratioSpec.ratio >= 1) {
+        return { width: longSide, height: Math.max(1, Math.round(longSide / ratioSpec.ratio)) };
+      }
+      return { width: Math.max(1, Math.round(longSide * ratioSpec.ratio)), height: longSide };
+    }
+
+    function currentRatioSpec() {
+      const value = ratioSelect.value === "custom" ? customRatio.value.trim() : ratioSelect.value;
+      if (!value || value === "keep") return null;
+      const normalized = value.toUpperCase();
+      if (/^[AB]\d+$/.test(normalized)) {
+        return { ratio: Math.SQRT2, preserveOrientation: true };
+      }
+      const parts = normalized.includes(":") ? normalized.split(":") : normalized.split("/");
+      if (parts.length !== 2) {
+        setStatus("比例格式无效，请使用 16:9 这样的格式", true);
+        return null;
+      }
+      const w = Number(parts[0]);
+      const h = Number(parts[1]);
+      if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+        setStatus("比例必须是正数", true);
+        return null;
+      }
+      return { ratio: w / h, preserveOrientation: false };
+    }
+
+    function warpPerspective(src, out, corners, width, height) {
+      const dst = [
+        { x: 0, y: 0 },
+        { x: width - 1, y: 0 },
+        { x: width - 1, y: height - 1 },
+        { x: 0, y: height - 1 }
+      ];
+      const h = homography(dst, corners);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const denom = h[6] * x + h[7] * y + 1;
+          const sx = (h[0] * x + h[1] * y + h[2]) / denom;
+          const sy = (h[3] * x + h[4] * y + h[5]) / denom;
+          sampleBilinear(src, out, sx, sy, x, y);
+        }
+      }
+    }
+
+    function homography(from, to) {
+      const a = [];
+      const b = [];
+      for (let i = 0; i < 4; i++) {
+        const x = from[i].x;
+        const y = from[i].y;
+        const u = to[i].x;
+        const v = to[i].y;
+        a.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
+        b.push(u);
+        a.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
+        b.push(v);
+      }
+      return solveLinearSystem(a, b).concat(1);
+    }
+
+    function solveLinearSystem(a, b) {
+      const n = b.length;
+      const m = a.map((row, i) => row.concat(b[i]));
+      for (let col = 0; col < n; col++) {
+        let pivot = col;
+        for (let row = col + 1; row < n; row++) {
+          if (Math.abs(m[row][col]) > Math.abs(m[pivot][col])) pivot = row;
+        }
+        [m[col], m[pivot]] = [m[pivot], m[col]];
+        const div = m[col][col] || 1e-12;
+        for (let j = col; j <= n; j++) m[col][j] /= div;
+        for (let row = 0; row < n; row++) {
+          if (row === col) continue;
+          const factor = m[row][col];
+          for (let j = col; j <= n; j++) m[row][j] -= factor * m[col][j];
+        }
+      }
+      return m.map(row => row[n]);
+    }
+
+    function sampleBilinear(src, out, sx, sy, dx, dy) {
+      const x0 = Math.floor(Math.max(0, Math.min(src.width - 1, sx)));
+      const y0 = Math.floor(Math.max(0, Math.min(src.height - 1, sy)));
+      const x1 = Math.min(src.width - 1, x0 + 1);
+      const y1 = Math.min(src.height - 1, y0 + 1);
+      const wx = sx - x0;
+      const wy = sy - y0;
+      const outIndex = (dy * out.width + dx) * 4;
+      const i00 = (y0 * src.width + x0) * 4;
+      const i10 = (y0 * src.width + x1) * 4;
+      const i01 = (y1 * src.width + x0) * 4;
+      const i11 = (y1 * src.width + x1) * 4;
+      for (let c = 0; c < 4; c++) {
+        const top = src.data[i00 + c] * (1 - wx) + src.data[i10 + c] * wx;
+        const bottom = src.data[i01 + c] * (1 - wx) + src.data[i11 + c] * wx;
+        out.data[outIndex + c] = top * (1 - wy) + bottom * wy;
+      }
+      out.data[outIndex + 3] = 255;
+    }
+
+    function enhanceImageData(imageData) {
+      const data = imageData.data;
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      }
+      const mean = sum / (data.length / 4);
+      const gain = mean < 150 ? 1.08 : 1.02;
+      for (let i = 0; i < data.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+          const centered = (data[i + c] - mean) * 1.08 + mean;
+          data[i + c] = clamp(centered * gain + 3, 0, 255);
+        }
+      }
+    }
+
+    function rotateOutputCanvas() {
+      const temp = document.createElement("canvas");
+      temp.width = outputCanvas.width;
+      temp.height = outputCanvas.height;
+      temp.getContext("2d").drawImage(outputCanvas, 0, 0);
+      if (state.rotation % 2 === 1) {
+        outputCanvas.width = temp.height;
+        outputCanvas.height = temp.width;
+      }
+      outputCtx.save();
+      outputCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+      outputCtx.translate(outputCanvas.width / 2, outputCanvas.height / 2);
+      outputCtx.rotate(state.rotation * Math.PI / 2);
+      outputCtx.drawImage(temp, -temp.width / 2, -temp.height / 2);
+      outputCtx.restore();
+    }
+
+    function updateCornerTable() {
+      if (!state.corners) {
+        cornerTable.hidden = true;
+        return;
+      }
+      cornerTable.hidden = false;
+      cornerTable.innerHTML = "";
+      orderPoints(state.corners).forEach((p, index) => {
+        const chip = document.createElement("div");
+        chip.className = "corner-chip";
+        chip.innerHTML = `<strong>${CORNER_LABELS[index]}</strong>${Math.round(p.x)}, ${Math.round(p.y)}`;
+        cornerTable.appendChild(chip);
+      });
+    }
+
+    function eventToImagePoint(event) {
+      const rect = sourceCanvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left) * (sourceCanvas.width / rect.width);
+      const y = (event.clientY - rect.top) * (sourceCanvas.height / rect.height);
+      return { x: x / state.previewScale, y: y / state.previewScale };
+    }
+
+    function toCanvasPoint(point) {
+      return { x: point.x * state.previewScale, y: point.y * state.previewScale };
+    }
+
+    function nearestCorner(point, maxDistance) {
+      let best = -1;
+      let bestDistance = maxDistance;
+      state.corners.forEach((corner, index) => {
+        const d = distance(point, corner);
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = index;
+        }
+      });
+      return best;
+    }
+
+    function defaultCorners() {
+      const w = state.image.width;
+      const h = state.image.height;
+      return [
+        { x: w * 0.08, y: h * 0.08 },
+        { x: w * 0.92, y: h * 0.08 },
+        { x: w * 0.92, y: h * 0.92 },
+        { x: w * 0.08, y: h * 0.92 }
+      ];
+    }
+
+    function clampPoint(point, width, height) {
+      return {
+        x: clamp(point.x, 0, width - 1),
+        y: clamp(point.y, 0, height - 1)
+      };
+    }
+
+    function distance(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function polygonArea(points) {
+      let area = 0;
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+        area += a.x * b.y - a.y * b.x;
+      }
+      return Math.abs(area) / 2;
+    }
+
+    function indexOfMin(values) {
+      return values.reduce((best, value, index) => value < values[best] ? index : best, 0);
+    }
+
+    function indexOfMax(values) {
+      return values.reduce((best, value, index) => value > values[best] ? index : best, 0);
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function setStatus(message, isError) {
+      sourceStatus.textContent = message;
+      sourceStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
+    }
+  </script>
+</body>
+</html>
